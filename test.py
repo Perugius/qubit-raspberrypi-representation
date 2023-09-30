@@ -33,6 +33,8 @@ states = ["static", "flipped", "falling"]
 brightness = 1
 count = 0
 touch = 0
+touch_count = 0
+toggle = 0 #toggle = 1 means the pillows are paired 
 #correction factor for so pillow acts same way no matter what side program 
 #is started on
 if (accelerometer.acceleration[2] < -8):
@@ -45,9 +47,11 @@ while True:
 	if (acc[2] < -8*c):
 		status = states[1]
 		pixels1.fill((brightness*10,0,0))
+		TEMP_MESSAGE = "RED"
 	elif (acc[2] > 8*c):
 		status = states[0]
 		pixels1.fill((0,0,brightness*10))
+		TEMP_MESSAGE = "BLUE"
 	#falling check
 	if ( -2 < acc[0] < 2 and -2 < acc[1] < 2 and -2 < acc[2] < 2):
 		status = states[2]
@@ -63,12 +67,31 @@ while True:
 	#message every clock cycle if not touching so client can do other
 	#stuff
 	touch = GPIO.input(17)
-	if(touch == 1):
-		MESSAGE = "notouch"
-		sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-		sock.sendto(MESSAGE.encode(), (UDP_IP, UDP_PORT))
+	#not touching and not paired
+	if(touch == 1 and toggle != 1):
+		MESSAGE = "idle"
+		touch_count = 0
+		print(MESSAGE)
+	#touching but not paired yet
+	elif(touch == 0 and toggle != 1 and MESSAGE != "BLUE" and MESSAGE != "RED"):
+		touch_count += 1
+		print(MESSAGE)
+	#touching and paired, so trying to unpair
+	elif(touch == 1 and toggle == 1 and MESSAGE != "PAIRED"):
+		MESSAGE = TEMP_MESSAGE
+		print(MESSAGE)
+		touch_count = 0
+	#not touching and paired, sending synced data
 	else:
-		MESSAGE = "touch"
-		sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-		sock.sendto(MESSAGE.encode(), (UDP_IP, UDP_PORT))
+		MESSAGE = TEMP_MESSAGE
+		touch_count += 1
+	#pair slave with master so their colors are synced
+	if (touch_count >= 100):
+		MESSAGE = "PAIRED"
+		toggle = (toggle + 1) % 2
+		print(MESSAGE)
+		touch_count = 0
+	sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+	sock.sendto(MESSAGE.encode(), (UDP_IP, UDP_PORT))
+
 	time.sleep(0.01)
