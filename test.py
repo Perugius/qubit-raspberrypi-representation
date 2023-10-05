@@ -8,7 +8,7 @@ import socket
 import RPi.GPIO as GPIO
 
 #for systemctl to work correctly, wait for network functions to activate
-#time.sleep(30)
+time.sleep(30)
 
 #switch setup
 GPIO.setmode(GPIO.BCM)
@@ -71,25 +71,30 @@ while True:
 	if(touch == 1 and toggle != 1):
 		MESSAGE = "idle"
 		touch_count = 0
-		print(MESSAGE)
+		print(MESSAGE + "1" )
 	#touching but not paired yet
 	elif(touch == 0 and toggle != 1 and MESSAGE != "BLUE" and MESSAGE != "RED"):
 		touch_count += 1
-		print(MESSAGE)
+		print(MESSAGE + "2")
 	#touching and paired, so trying to unpair
-	elif(touch == 1 and toggle == 1 and MESSAGE != "PAIRED"):
+	elif(touch == 0 and toggle == 1 and MESSAGE != "PAIRED"):
 		MESSAGE = TEMP_MESSAGE
-		print(MESSAGE)
-		touch_count = 0
+		print(MESSAGE + "3")
+		touch_count += 1
 	#not touching and paired, sending synced data
 	else:
-		MESSAGE = TEMP_MESSAGE
-		touch_count += 1
+		if (brightness == 1):
+			MESSAGE = TEMP_MESSAGE
+		else:
+			MESSAGE = "OFF"
+		touch_count = 0
+		print(MESSAGE + "4")
 	#pair slave with master so their colors are synced
 	if (touch_count >= 100):
 		MESSAGE = "PAIRED"
+		pixels1.fill((0, 40, 0))
 		toggle = (toggle + 1) % 2
-		print(MESSAGE)
+		print(MESSAGE + "5")
 		touch_count = 0
 	sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 	sock.sendto(MESSAGE.encode(), (UDP_IP, UDP_PORT))
