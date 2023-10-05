@@ -1,0 +1,14 @@
+[Unit]
+Description=Custom Python Service
+After=network.target network-online.target
+Wants=network-online.target
+Conflicts=getty@tty1.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/bin/myscript.py
+StandardInput=tty-force
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
