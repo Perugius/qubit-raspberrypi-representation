@@ -22,7 +22,7 @@ GPIO.setmode(GPIO.BCM)
 GPIO.setup(17, GPIO.IN, pull_up_down = GPIO.PUD_UP)
 
 # UDP for communication with other pi
-UDP_IP = "192.168.1.203"
+UDP_IP = "192.168.1.201"
 UDP_PORT = 5005
 MESSAGE = "idle"
 
@@ -43,7 +43,7 @@ buttonCount = 0
 ledBrightness_new = 0
 ledBrightness_old = 0
 accelerometerXYZ = []
-
+stateEntangled = 0 # state 0 means the pillos are not entangled, state 1 means they are entangled
 # -------------------------------Main Function-----------------------------
 def color_button():
     global ledBrightness_old
@@ -56,8 +56,12 @@ def color_button():
 def color_flip():
     if accelerometerXYZ[2] < -8:
         pixels1.fill((ledBrightness_new*10, 0, 0))
+        return "RED"
     elif accelerometerXYZ[2] > 8:
         pixels1.fill((0, 0, ledBrightness_new*10))
+        return "BLUE"
+    else:
+        return "FLIPPING"
     
 
 def squeeze_control():
@@ -66,7 +70,7 @@ def squeeze_control():
     global ledBrightness_new
     global buttonPressed
 
-    if buttonCount >= 5:
+    if buttonCount >= 20:
         ledBrightness_old = ledBrightness_new
         ledBrightness_new = (ledBrightness_new+1)%2
         buttonCount = 0
@@ -76,7 +80,7 @@ def squeeze_control():
         buttonCount = 0
 
 def nfc_read():
-    uid = pn532.read_passive_target(timeout=0.001)
+    uid = pn532.read_passive_target(timeout=0.01)
     # print('.', end="")
     # Try again if no card is available.
     if uid is None:
@@ -84,13 +88,30 @@ def nfc_read():
     return [hex(i) for i in uid]
     # print('Found card with UID:', [hex(i) for i in uid])
 
+def udp_send():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.sendto(MESSAGE.encode(), (UDP_IP, UDP_PORT))
+
 while True:
 
     accelerometerXYZ = accelerometer.acceleration
     buttonPressed = GPIO.input(17)
     squeeze_control()
-    print(buttonCount)
+    print("button count: ", buttonCount)
     color_button()
-    color_flip()
-    print(nfc_read())
-    #time.sleep(0.01)
+    color = color_flip()
+
+    # check for quantum entaglement (touch) only if both have color OR they already are entangled
+    if ledBrightness_new == 1 or stateEntangled == 1:
+        if nfc_read() != None:
+            stateEntangled = (stateEntangled+1)%2
+    else:
+        time.sleep(0.1)
+    
+    if stateEntangled == 1:
+        MESSAGE = color
+    else:
+        MESSAGE = "idle"
+    print(MESSAGE)
+    udp_send()
+    print(stateEntangled)
