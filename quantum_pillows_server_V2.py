@@ -16,12 +16,12 @@ import random
 # time.sleep(30)
 
 #TCP setup
-# TCP_SERVER = "192.168.1.200" # maybe "127.0.0.1" better?
-# TCP_PORT = 12345
-# sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-# sock.bind((TCP_SERVER, TCP_PORT))
-# sock.listen(1)
-# c, addr = sock.accept()
+TCP_SERVER = "192.168.1.200" # maybe "127.0.0.1" better?
+TCP_PORT = 12345
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.bind((TCP_SERVER, TCP_PORT))
+sock.listen(1)
+c, addr = sock.accept()
 
 #LED setup
 # init gpio, number of lights and brightness
@@ -48,19 +48,20 @@ buttonCount = 0
 accelerometerXYZ = []
 ledBrightness_new = 0
 ledBrightness_old = 0
+squeezeCount = 0 #count amount of times pillow has been squeezed
 nfcDelay = 0 #read nfc every x clock cycles, this variable is the delay of x clock cycles
 ledNormalizer = 1 #used to start as red no matter what side the pillow is held on
 state = "default"
 ledColor = "RED1"
 oldColor = "RED1" #keeps track of old color so we can see when pillow flipped
-flipCount = 0 #keeps track of flips and only changes in default state
+flipCount = 0 #keeps track of flips and only changes in default and entangled states
 internalColor = 0 #flip count before the going into superposition
+previousState = 'default' #keep previous state for disentangling
 dropCount = 0 #count for checking how long pillow has been dropping
 dropped = False #keeps track of if pillow has been dropped
 randomColor = [0, 1] #0 for even(red) 1 for odd(blue) when dropping to choose randomly 
 otherPillow = 'DEFO' #message from other pillow which says which state pillow is in, DEFO = default, SUPE = superposition ,etc
 thisPillow = 'DEFO' #message to send to other pillow to show what state current pillow is in
-
 # -------------------------------Function-----------------------------
 def colorfn(color):
     if color == "RED1":
@@ -86,16 +87,18 @@ def flipCheck():
     elif accelerometerXYZ[2] * ledNormalizer > 8:
         ledColor = "RED1"
 
-def squeeze_control():
+def squeezeCheck():
     global buttonPress
     global buttonCount
     global ledBrightness_new
     global ledBrightness_old
+    global squeezeCount
 
     if buttonCount >= 15:
         ledBrightness_old = ledBrightness_new
         ledBrightness_new = (ledBrightness_new+1)%2
         buttonCount = 0
+        squeezeCount += 1
     if buttonPress == 0:
         buttonCount += 1
     else:
@@ -134,20 +137,29 @@ while True:
     #readings
     accelerometerXYZ = accelerometer.acceleration
     buttonPress = GPIO.input(17)
-    squeeze_control()
     fallingCheck() 
     nfcDelay += 1
 
-    print(state)
-    print(dropCount)
-    #print("led b new: ", ledBrightness_new)
-    #print('led b old:',  ledBrightness_old)
-    time.sleep(0.01)
+    #TCP communication after at the end of loop!
+    # c.send(thisPillow.encode())
+    # otherPillow = c.recv(4)
+    # otherPillow = otherPillow.decode()
+
+
+    print(otherPillow)
+    print("squeeze count ", squeezeCount)
+    print("prev", previousState)
+    print("flip count ", flipCount)
+    #print(dropCount)
+
+    time.sleep(0.1)
     #-------------------------------default state--------------------------
     if state == 'default':
         thisPillow = 'DEFO'
-        #check if pillow was flipped
+        #check if pillow was flipped and squeezed and save color every cycle
         flipCheck()
+        squeezeCheck()
+        internalColor = flipCount
         #set color
         if flipCount%2 == 0:
             colorfn("RED1")
@@ -155,9 +167,7 @@ while True:
             colorfn("BLUE")
 
         #check if pillow has been squeezed -> enter superposition
-        if ledBrightness_new != ledBrightness_old:
-            ledBrightness_old = ledBrightness_new
-            internalColor = flipCount
+        if squeezeCount % 2 != 0:
             state = "superposition"
 
         #check if pillow has been dropped -> assign random color
@@ -170,11 +180,14 @@ while True:
             if nfcDelay >= 10:
                 nfcDelay = 0
                 if nfc_read():
+                    previousState = state
                     state = 'entangled'
 
     #----------------------------superposition----------------------
     if state == 'superposition':
+        thisPillow = "SUPE"
         ledColor = "OFF1"
+        oldColor = ledColor
         colorfn(ledColor)
 
         #dropping in superposition -> take random color and go to default again
@@ -188,9 +201,61 @@ while True:
             if nfcDelay >=10:
                 nfcDelay = 0
                 if nfc_read():
+                    previousState = state
                     state = 'entangled'
 
     #------------------------entangled-----------------------------------
     if state == 'entangled':
-        print(state)
+        oldColor = ledColor
+        thisPillow = 'ENTA'
+
+        #count times flipped and squeezed
+        flipCheck()
+        squeezeCheck()
+
+        #check if flip and squeeze count is even, if they are check for nfc contact to disentangle and set to previous state
+        if (squeezeCount%2 == 0) and (flipCount%2 == 0):
+            if nfcDelay >= 10:
+                nfcDelay = 0
+                if nfc_read():
+                    squeezeCount = 0
+                    state = previousState
+                    #set this pillow to NULL, otherwise this pillow will send ENTA so other pillow goes into default then into entanglement instantly again
+                    thisPillow = 'NULL'
+                    flipCount = internalColor
+                    msg = "DIS0"
+                    c.send(msg.encode())
+
+        #if squeeze is odd, disentangle and set both pillows to default with opposite states
+        #here use the last char of the message to send if flip is even/odd
+        #first case is if the other pillow was in superposition second case is this pillow was in sup.
+        if (squeezeCount%2 == 1):
+            if nfcDelay >= 10:
+                nfcDelay = 0
+                if nfc_read():
+                        squeezeCount = 0
+                        state = 'default'
+                        thisPillow = 'DEFO'
+                    #THIS PILLOW PREVIOUS STATE = DEFAULT | OTHER PILLOW PREV. STATE = SUPERPOSITION
+                        if previousState == 'default':
+                            if internalColor%2 == 0: #red color previously -> other pillow is going to be red
+                                msg = "DIS1"
+                            else: #blue color prev. -> other pillow will be blue
+                                msg = "DIS2"
+                            flipCount = internalColor + 1
+                            c.send(msg.encode())
+                    #THIS PILLOW PREVIOUS STATE = SUPERPOSITION | OTHER PILLOW PREV. = DEFAULT
+                        if previousState == 'superposition':
+                            if otherPillow == 'ENT0': #other pillow prev color = red
+                                flipCount = 0
+                            elif otherPillow == 'ENT1':#other pillow prev color = blue
+                                flipCount = 1
+                            msg = "DIS3"
+                            c.send(msg.encode())
+                        
         
+        #check if flip and squeeze count
+    #-----TCP--------
+    c.send(thisPillow.encode())
+    otherPillow = c.recv(4)
+    otherPillow = otherPillow.decode()
