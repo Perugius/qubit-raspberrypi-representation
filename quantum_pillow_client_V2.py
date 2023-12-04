@@ -50,7 +50,7 @@ previousState = 'default' #keep previous state for disentangling
 dropCount = 0 #count for checking how long pillow has been dropping
 dropped = False #keeps track of if pillow has been dropped
 randomColor = [0, 1] #0 for even(red) 1 for odd(blue) when dropping to choose randomly 
-otherPillow = 'ENTA' #message from other pillow which says which state pillow is in, DEFO = default, SUPE = superposition ,etc
+otherPillow = 'DEFO' #message from other pillow which says which state pillow is in, DEFO = default, SUPE = superposition ,etc
 thisPillow = 'DEFO' #message to send to other pillow to show what state current pillow is in
 
 # -------------------------------Function-----------------------------
@@ -131,7 +131,7 @@ while True:
     
     print(otherPillow)
     print(state)
-    time.sleep(0.01)
+    time.sleep(0.1)
     #-------------------------------default state--------------------------
     if state == 'default':
         thisPillow = 'DEFO'
@@ -181,14 +181,42 @@ while True:
     #------------------------entangled-----------------------------------
     if state == 'entangled':
         oldColor = ledColor
-        thisPillow = 'ENTA'
+        #check and send if previous color red or blue so server pillow can adjust accordingly
+        if internalColor%2 == 0:
+            thisPillow = 'ENT0'
+        else:
+            thisePillow = 'ENT1'
+        #thisPillow = 'ENTA'
         #count times flipped and squeezed
         flipCheck()
         squeezeCheck()
 
         #if other pillow notices contact when squeezes and flips are even, disentangle and set to previous state
-        if  otherPillow == "DIS1":
+        if  otherPillow == "DIS0":
             state = previousState
+            print(state)
             flipCount = internalColor
-        elif otherPillow == "DIS2":
+        
+        #DIS1 TO DIS3 are condition of disentanglement when squeeze is odd, described in server pillow
+        if otherPillow == "DIS1":
             state = 'default'
+            flipCount = 0
+            squeezeCount = 0
+        if otherPillow == "DIS2":
+            state = 'default'
+            flipCount = 1
+            squeezeCount = 0
+        if otherPillow == "DIS3":
+            state = 'default'
+            flipCount = internalColor + 1
+            squeezeCount = 0
+        
+
+    #----------TCP-----------
+    # try:
+    #     otherPillow = sock.recv(4)
+    #     sock.send(thisPillow.encode())
+    #     otherPillow = otherPillow.decode()
+    # finally:
+    #     ("comm received")
+    
