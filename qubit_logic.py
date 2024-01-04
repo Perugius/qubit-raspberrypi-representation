@@ -14,6 +14,15 @@ import numpy as np
 
 #------------------------------------------Initializations----------------------------------------
 
+#TCP setup
+TCP_SERVER = "192.168.168.222" # maybe "127.0.0.1" better?
+TCP_PORT = 12345
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.bind((TCP_SERVER, TCP_PORT))
+sock.listen(1)
+c, addr = sock.accept()
+MESSAGE = "TESTING"
+
 #LED setup
 # init gpio, number of lights and brightness
 pixels1 = neopixel.NeoPixel(board.D18, 60, brightness =1)
@@ -27,11 +36,11 @@ i2c = busio.I2C(board.SCL, board.SDA)
 accelerometer = adafruit_adxl34x.ADXL345(i2c)
 
 # nfc
-# pn532 = PN532_I2C(debug=False, reset=20, req=16)
-# ic, ver, rev, support = pn532.get_firmware_version()
-# print('Found PN532 with firmware version: {0}.{1}'.format(ver, rev))
-# pn532.SAM_configuration()
-# print('Waiting for RFID/NFC card...')
+pn532 = PN532_I2C(debug=False, reset=20, req=16)
+ic, ver, rev, support = pn532.get_firmware_version()
+print('Found PN532 with firmware version: {0}.{1}'.format(ver, rev))
+pn532.SAM_configuration()
+print('Waiting for RFID/NFC card...')
 
 #operations as np arrays
 xGate = np.array([[0, 1], [1, 0]])
@@ -55,8 +64,12 @@ n2 = np.kron(n, identity)
 pillow1State = np.array([1, 0]) #this pillow
 pillow2State = np.array([1, 0]) #other pillow
 combinedState = np.kron(pillow2State, pillow1State)
+combinedState_previous = combinedState
+pillow2op = "IDLE" #other pillow sends operation done
+hadamardTracker = False #false = no hadamard gate applied yet, true = hadamard has been applied once at least
 #dropping
 dropCount = 0
+dropped = False
 #flipping
 accelerometerXYZ = []
 flipped = False
@@ -70,6 +83,8 @@ buttonCount = 0
 buttonPress = 0
 squeezeCount = 0
 squeezed = False
+#nfc
+nfcDelay = 0
 
 # -------------------------------Function-----------------------------
 def colorfn(color):
@@ -80,6 +95,33 @@ def colorfn(color):
     if color == "OFF":
         pixels1.fill((0, 0, 0))
 
+def vector2color():
+    global hadamardTracker
+    global combinedState
+    global MESSAGE
+
+    if hadamardTracker == False:
+        if np.allclose(combinedState, np.array([1, 0, 0, 0])):
+            colorfn("RED")
+            MESSAGE = "RED1"
+        elif np.allclose(combinedState, np.array([0, 1, 0, 0])):
+            colorfn("BLUE")
+            MESSAGE = "RED1"
+        elif np.allclose(combinedState, np.array([0, 0, 1, 0])):
+            colorfn("RED")
+            MESSAGE = "BLUE"
+        elif np.allclose(combinedState, np.array([0, 0, 0, 1])):
+            colorfn("BLUE")
+            MESSAGE = "BLUE"
+    elif hadamardTracker == True:
+        colorfn("OFF")
+
+def whiteBlink():
+    for i in range(3):
+        pixels1.fill((10, 10, 10))
+        time.sleep(0.1)
+        pixels1.fill((0, 0, 0))
+        time.sleep(0.1)
 
 def flipCheck():
     global flipCount
@@ -106,7 +148,7 @@ def squeezeCheck():
     global squeezeCount
     global squeezed
 
-    if buttonCount >= 200:
+    if buttonCount >= 50:
         buttonTracker_old = buttonTracker_new
         buttonTracker_new = (buttonTracker_new+1)%2
         buttonCount = 0
@@ -123,7 +165,7 @@ def nfc_read():
     # Try again if no card is available.
     if uid is None:
         return
-    return 1 #[hex(i) for i in uid]
+    return [hex(i) for i in uid]
 
 def fallingCheck():
     global accelerometerXYZ
@@ -132,28 +174,83 @@ def fallingCheck():
 
     if dropCount >= 3:
         dropped = True
-    if (-2<accelerometerXYZ[0]<2 and -2<accelerometerXYZ[1]<2 and -2<accelerometerXYZ[2]<2):
+    if (-3<accelerometerXYZ[0]<3 and -3<accelerometerXYZ[1]<3 and -3<accelerometerXYZ[2]<3):
         dropCount += 1
     else:
         dropCount = 0
     
+def measurement(pillow):
+    global combinedState
+    global hadamardTracker
 
-print(n1)
-print(n2)
-print(n1tilde)
-print(n2tilde)
-# while True:
-#     accelerometerXYZ = accelerometer.acceleration
-#     flipCheck()
-#     squeezeCheck()
-#     buttonPress = GPIO.input(17)
+    if pillow == 1:
+        hadamardTracker = False
+        P1red = combinedState.conjugate()@n1tilde@combinedState
+        P1blue = combinedState.conjugate()@n1@combinedState
+        color1Select = np.random.choice(np.arange(2), p=(P1red, P1blue))
+        #red color selected pillow 1
+        if color1Select == 0:
+            combinedState = n1tilde@combinedState
+            combinedState = combinedState/np.linalg.norm(combinedState)
+        #blue color selected pillow 1
+        if color1Select == 1:
+            combinedState = n1@combinedState
+            combinedState = combinedState/np.linalg.norm(combinedState)
 
-#     if squeezed:
-#         combinedState = np.dot(h1, combinedState)
-#         squeezed = False
-#     if flipped:
-#         combinedState = np.dot(x1, combinedState)
-#         flipped = False
-#     #print(flipCount)
-#     print(flipped)
-#     print(combinedState)
+    if pillow == 2:
+        P2red = combinedState.conjugate()@n2tilde@combinedState
+        P2blue = combinedState.conjugate()@n2@combinedState
+        color2Select = np.random.choice(np.arange(2), p=(P2red, P2blue))
+        #red color selected pillow 2
+        if color2Select == 0:
+            combinedState = n2tilde@combinedState
+            combinedState = combinedState/np.linalg.norm(combinedState)
+        #blue color selected pillow 2
+        if color2Select == 1:
+            combinedState = n2@combinedState
+            combinedState = combinedState/np.linalg.norm(combinedState)
+
+
+
+
+while True:
+    accelerometerXYZ = accelerometer.acceleration
+    buttonPress = GPIO.input(17)
+    flipCheck()
+    squeezeCheck()
+    fallingCheck()
+    vector2color()
+    nfcDelay += 1
+    #TCP communication
+    c.send(MESSAGE.encode())
+    pillow2op = c.recv(4)
+    pillow2op = pillow2op.decode()
+
+    if squeezed:
+        whiteBlink()    
+        hadamardTracker = True
+        combinedState = np.dot(h1, combinedState)
+        squeezed = False
+    if flipped:
+        whiteBlink()
+        combinedState = np.dot(x1, combinedState)
+        flipped = False
+    if dropped:
+        whiteBlink()
+        measurement(1)
+        dropped = False
+
+    if nfcDelay >= 100:
+        nfcDelay = 0
+        if nfc_read():
+            whiteBlink() @combinedState
+
+
+    if pillow2op == "SQUZ":
+        combinedState = np.dot(h2, combinedState)
+    if pillow2op == "FLIP":
+        combinedState = np.dot(x2, combinedState)
+    if pillow2op == "DROP":
+        measurement(2)
+    
+    print(combinedState)
