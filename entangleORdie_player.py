@@ -14,9 +14,9 @@ import numpy as np
 
 #------------------------------------------Initializations----------------------------------------
 
-#TCP setup
-TCP_SERVER = "192.168.104.106" # maybe "127.0.0.1" better?
-TCP_PORT = 12345
+#TCP setup with other pi
+TCP_SERVER = "192.168.158.106" # maybe "127.0.0.1" better?
+TCP_PORT = 12350
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sock.bind((TCP_SERVER, TCP_PORT))
 sock.listen(1)
@@ -74,12 +74,18 @@ dropped = False
 nfcDelay = 0
 #game specific
 startTime = time.time()
-HP = 20
+HP = 200
 redDebuff = False
 greenBuff = False
 temp_redDebuff = False
 temp_greenBuff = False
+pillow1measured = False
 pillow2measured = False
+
+#random state vectors to choose from instead of using probability function
+randomState_noEnt = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
+randomState_Ent = np.array([[1, 0, 0, 0], [0, 0, 0, 1]])
+#bool entangleTrigger = 0
 # -------------------------------Function-----------------------------
 def colorfn(color):
     if color == "RED":
@@ -131,9 +137,9 @@ def vector2color():
 def whiteBlink():
     for i in range(3):
         pixels1.fill((10, 10, 10))
-        time.sleep(0.1)
+        time.sleep(0.05)
         pixels1.fill((0, 0, 0))
-        time.sleep(0.1)
+        time.sleep(0.05)
 
 def nfc_read():
     uid = pn532.read_passive_target(timeout=0.01)
@@ -147,10 +153,10 @@ def fallingCheck():
     global dropCount
     global dropped
 
-    if dropCount >= 3:
+    if dropCount >= 1:
         dropped = True
         dropCount = 0
-    if (-3<accelerometerXYZ[0]<3 and -3<accelerometerXYZ[1]<3 and -3<accelerometerXYZ[2]<3):
+    elif (-3<accelerometerXYZ[0]<3 and -3<accelerometerXYZ[1]<3 and -3<accelerometerXYZ[2]<3):
         dropCount += 1
     else:
         dropCount = 0
@@ -163,10 +169,14 @@ def measurement(pillow):
     global temp_greenBuff
     global temp_redDebuff
 
+    
     if pillow == 1:
         hadamardTracker = False
         P1red = combinedState.conjugate()@n1tilde@combinedState
         P1blue = combinedState.conjugate()@n1@combinedState
+        if P1red == P1blue == 0.5:
+            P1blue = 0.65
+            P1red = 0.35
         color1Select = np.random.choice(np.arange(2), p=(P1red, P1blue))
         #red color selected pillow 1
         if color1Select == 0:
@@ -182,6 +192,9 @@ def measurement(pillow):
     if pillow == 2:
         P2red = combinedState.conjugate()@n2tilde@combinedState
         P2blue = combinedState.conjugate()@n2@combinedState
+        if P2red == P2blue == 0.5:
+            P2blue = 0.65
+            P2red = 0.35
         color2Select = np.random.choice(np.arange(2), p=(P2red, P2blue))
         #red color selected pillow 2
         if color2Select == 0:
@@ -194,29 +207,37 @@ def measurement(pillow):
             combinedState = n2@combinedState
             combinedState = combinedState/np.linalg.norm(combinedState)
 
+# def fake_measurement(pillow):
+#     global combinedState
+
+#     if np.allclose(combinedState, np.array([0.70710678, 0, 0, 0.70710678])):
+
+
 def HP_calculation(hp):
     global redDebuff
     global greenBuff
     global temp_redDebuff
     global temp_greenBuff
 
+    hp_current_round = 0 #first add all buffs and debuffs to this var then to hp
     if redDebuff == True:
-        hp -= 10
+        hp_current_round -= 10
         redDebuff = False
-        time.sleep(2)
+        #time.sleep(2)
     elif greenBuff == True:
-        hp += 10
+        hp_current_round += 10
         greenBuff = False
-        time.sleep(2)
+        #time.sleep(2)
 
     if temp_redDebuff == True:
-        hp -= 10
+        hp_current_round -= 10
         temp_redDebuff = False
     elif temp_greenBuff == True:
-        hp += 10
+        hp_current_round += 10
         temp_greenBuff = False
 
-    return hp
+
+    return hp + hp_current_round
 
 def round_reset():
     global combinedState
@@ -231,20 +252,27 @@ def round_reset():
     temp_greenBuff = False
     temp_redDebuff = False
 
+#write data that I want to send into a file
+def file_write(hp):
+    f = open("data_trans.txt", "w")
+    f.write(str(hp))
+    #f.close()
+    
+
+
 round_reset()
 
 while True:
     elapsedStartTime = time.time() - startTime
     print(combinedState)
-    print(temp_greenBuff)
-    print(temp_redDebuff)
     print(HP)
-    if elapsedStartTime >= 60:
+    if elapsedStartTime >= 6000:
         break
 
     if HP == 0:
         print("YOU DIED")
         break
+    file_write(HP)
     accelerometerXYZ = accelerometer.acceleration
     fallingCheck()
     vector2color()
@@ -255,33 +283,45 @@ while True:
     pillow2op = pillow2op.decode()
 
     #if we measure second pillow then wait 3 seconds we reset state
-    if pillow2measured and time.time()-roundElapsedTime>3:
+    if pillow1measured  and time.time()-roundElapsedTime>3:
         pillow2measured = False
+        pillow1measured = False
         round_reset()
+
+    if pillow2measured  and time.time()-roundElapsedTime>3:
+        pillow2measured = False
+        combinedState = h2@combinedState
 
     #if drop player pillow then all the hp is calculated
     if dropped:
         whiteBlink()
+        np.random.seed()
         measurement(1)
         vector2color()
+        pillow1measured = True
+        #time.sleep(2)
         HP = HP_calculation(HP)
         dropped = False
-        round_reset()
+        roundElapsedTime = time.time()
+
+        #round_reset()
 
     #if we drop the second pillow the potential hp changed are calculated but not actualized
     if pillow2op == "DROP":
         pillow2measured = True
+        np.random.seed()
         measurement(2)
         roundElapsedTime = time.time()
     
     #if we touch we go into entanglement
-    if nfcDelay >= 100:
+    if nfcDelay >= 20:
         nfcDelay = 0
         if nfc_read():
+            round_reset()
             whiteBlink() 
             combinedState = np.array([0.70710678, 0, 0, 0.70710678])
-
-
+            entagledTrigger = 1
+            roundElapsedTime = time.time()  
 
 print("HP: ", HP)
 
