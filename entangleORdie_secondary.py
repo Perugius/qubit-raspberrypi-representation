@@ -14,8 +14,8 @@ import numpy as np
 #------------------------------------------Initializations----------------------------------------
 
 #TCP setup
-TCP_SERVER = "192.168.104.106"
-TCP_PORT = 12345
+TCP_SERVER = "192.168.158.106"
+TCP_PORT = 12350
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sock.connect((TCP_SERVER, TCP_PORT))
 MESSAGE = "hello"
@@ -128,12 +128,14 @@ def fallingCheck():
     global dropCount
     global dropped
 
-    if dropCount >= 3:
+    if dropCount >= 1:
         dropped = True
-    if (-2<accelerometerXYZ[0]<2 and -2<accelerometerXYZ[1]<2 and -2<accelerometerXYZ[2]<2):
+        dropCount = 0
+        print("dropped")
+    elif (-3<accelerometerXYZ[0]<3 and -3<accelerometerXYZ[1]<3 and -3<accelerometerXYZ[2]<3):
         dropCount += 1
     else:
-        dropCount = 0
+       	dropCount = 0
     
 while True:
     accelerometerXYZ = accelerometer.acceleration
