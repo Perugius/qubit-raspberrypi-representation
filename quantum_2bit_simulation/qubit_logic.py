@@ -15,13 +15,13 @@ import numpy as np
 #------------------------------------------Initializations----------------------------------------
 
 #TCP setup
-TCP_SERVER = "192.168.104.106" # maybe "127.0.0.1" better?
-TCP_PORT = 12345
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock.bind((TCP_SERVER, TCP_PORT))
-sock.listen(1)
-c, addr = sock.accept()
-MESSAGE = "TESTING"
+# TCP_SERVER = "192.168.104.106" # maybe "127.0.0.1" better?
+# TCP_PORT = 12345
+# sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+# sock.bind((TCP_SERVER, TCP_PORT))
+# sock.listen(1)
+# c, addr = sock.accept()
+# MESSAGE = "TESTING"
 
 #LED setup
 # init gpio, number of lights and brightness
@@ -192,7 +192,8 @@ def fallingCheck():
 
     if dropCount >= 1:
         dropped = True
-    if (-3<accelerometerXYZ[0]<3 and -3<accelerometerXYZ[1]<3 and -3<accelerometerXYZ[2]<3):
+        dropCount = 0
+    elif (-3<accelerometerXYZ[0]<3 and -3<accelerometerXYZ[1]<3 and -3<accelerometerXYZ[2]<3):
         dropCount += 1
     else:
         dropCount = 0
@@ -240,9 +241,9 @@ while True:
     vector2color()
     nfcDelay += 1
     #TCP communication
-    c.send(MESSAGE.encode())
-    pillow2op = c.recv(4)
-    pillow2op = pillow2op.decode()
+    # c.send(MESSAGE.encode())
+    # pillow2op = c.recv(4)
+    # pillow2op = pillow2op.decode()
 
     if squeezed:
         whiteBlink()    
