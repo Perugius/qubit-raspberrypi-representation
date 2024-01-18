@@ -15,7 +15,7 @@ import numpy as np
 #------------------------------------------Initializations----------------------------------------
 
 #TCP setup
-TCP_SERVER = "192.168.168.222" # maybe "127.0.0.1" better?
+TCP_SERVER = "192.168.104.106" # maybe "127.0.0.1" better?
 TCP_PORT = 12345
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sock.bind((TCP_SERVER, TCP_PORT))
@@ -99,20 +99,38 @@ def vector2color():
     global hadamardTracker
     global combinedState
     global MESSAGE
+    global thisPillow
+
+    if np.allclose(combinedState, np.array([1, 0, 0, 0])):
+        thisPillow = "RED"
+        MESSAGE = "RED1"
+    elif np.allclose(combinedState, np.array([0, 1, 0, 0])):
+        thisPillow = "BLUE"
+        MESSAGE = "RED1"
+    elif np.allclose(combinedState, np.array([0, 0, 1, 0])):
+        thisPillow = "RED"
+        MESSAGE = "BLUE"
+    elif np.allclose(combinedState, np.array([0, 0, 0, 1])):
+        thisPillow = "BLUE"
+        MESSAGE = "BLUE"
+    elif np.allclose(abs(combinedState), np.array([0.70710678, 0, 0, 0.70710678])) or np.allclose(abs(combinedState), np.array([0, 0.70710678, 0.70710678, 0])) or np.allclose(abs(combinedState), np.array([0.5, 0.5, 0.5, 0.5])):
+        thisPillow = "OFF"
+        MESSAGE = "OFF1"
+    elif np.allclose(abs(combinedState), np.array([0.70710678, 0.70710678, 0, 0])):
+        thisPillow = "OFF"
+        MESSAGE = "RED1"
+    elif np.allclose(abs(combinedState), np.array([0, 0, 0.70710678, 0.70710678])):
+        thisPillow = "OFF"
+        MESSAGE = "BLUE"
+    elif np.allclose(abs(combinedState), np.array([0, 0.70710678, 0, 0.70710678])):
+        thisPillow = "BLUE"
+        MESSAGE = "OFF1"  
+    elif np.allclose(abs(combinedState), np.array([0.70710678, 0,  0.70710678, 0])):
+        thisPillow = "RED"
+        MESSAGE = "OFF1"
 
     if hadamardTracker == False:
-        if np.allclose(combinedState, np.array([1, 0, 0, 0])):
-            colorfn("RED")
-            MESSAGE = "RED1"
-        elif np.allclose(combinedState, np.array([0, 1, 0, 0])):
-            colorfn("BLUE")
-            MESSAGE = "RED1"
-        elif np.allclose(combinedState, np.array([0, 0, 1, 0])):
-            colorfn("RED")
-            MESSAGE = "BLUE"
-        elif np.allclose(combinedState, np.array([0, 0, 0, 1])):
-            colorfn("BLUE")
-            MESSAGE = "BLUE"
+        colorfn(thisPillow)
     elif hadamardTracker == True:
         colorfn("OFF")
 
@@ -148,7 +166,7 @@ def squeezeCheck():
     global squeezeCount
     global squeezed
 
-    if buttonCount >= 50:
+    if buttonCount >= 20:
         buttonTracker_old = buttonTracker_new
         buttonTracker_new = (buttonTracker_new+1)%2
         buttonCount = 0
@@ -172,7 +190,7 @@ def fallingCheck():
     global dropCount
     global dropped
 
-    if dropCount >= 3:
+    if dropCount >= 1:
         dropped = True
     if (-3<accelerometerXYZ[0]<3 and -3<accelerometerXYZ[1]<3 and -3<accelerometerXYZ[2]<3):
         dropCount += 1
@@ -243,7 +261,8 @@ while True:
     if nfcDelay >= 100:
         nfcDelay = 0
         if nfc_read():
-            whiteBlink() @combinedState
+            whiteBlink() 
+            combinedState = cnot12@combinedState
 
 
     if pillow2op == "SQUZ":
