@@ -75,6 +75,7 @@ nfcDelay = 0
 #game specific
 startTime = time.time()
 HP = 200
+HP_calculation_Toggle = False
 redDebuff = False
 greenBuff = False
 temp_redDebuff = False
@@ -100,6 +101,7 @@ def vector2color():
     global combinedState
     global MESSAGE
     global thisPillow
+    global pillow2measured
 
     if np.allclose(combinedState, np.array([1, 0, 0, 0])):
         thisPillow = "RED"
@@ -127,6 +129,9 @@ def vector2color():
         MESSAGE = "OFF1"  
     elif np.allclose(abs(combinedState), np.array([0.70710678, 0,  0.70710678, 0])):
         thisPillow = "RED"
+        MESSAGE = "OFF1"
+
+    if pillow2measured == False:
         MESSAGE = "OFF1"
 
     if hadamardTracker == False:
@@ -236,7 +241,6 @@ def HP_calculation(hp):
         hp_current_round += 10
         temp_greenBuff = False
 
-
     return hp + hp_current_round
 
 def round_reset():
@@ -246,11 +250,15 @@ def round_reset():
     global temp_redDebuff
     global greenBuff
     global redDebuff
-    
+    global HP_calculation_Toggle
+
     combinedState = np.array([0.5, 0.5, 0.5, 0.5])
     hadamardTracker = True
     temp_greenBuff = False
     temp_redDebuff = False
+    redDebuff = False
+    greenBuff = False
+    HP_calculation_Toggle = False
 
 #write data that I want to send into a file
 def file_write(hp):
@@ -258,7 +266,6 @@ def file_write(hp):
     f.write(str(hp))
     #f.close()
     
-
 
 round_reset()
 
@@ -269,9 +276,6 @@ while True:
     if elapsedStartTime >= 6000:
         break
 
-    if HP == 0:
-        print("YOU DIED")
-        break
     file_write(HP)
     accelerometerXYZ = accelerometer.acceleration
     fallingCheck()
@@ -290,21 +294,23 @@ while True:
 
     if pillow2measured  and time.time()-roundElapsedTime>3:
         pillow2measured = False
+        temp_redDebuff = False
+        temp_greenBuff = False
         combinedState = h2@combinedState
 
     #if drop player pillow then all the hp is calculated
     if dropped:
-        whiteBlink()
+        time.sleep(0.2)
         np.random.seed()
         measurement(1)
         vector2color()
         pillow1measured = True
-        #time.sleep(2)
-        HP = HP_calculation(HP)
+        if HP_calculation_Toggle == False:
+            HP = HP_calculation(HP)
+            HP_calculation_Toggle = True
         dropped = False
         roundElapsedTime = time.time()
 
-        #round_reset()
 
     #if we drop the second pillow the potential hp changed are calculated but not actualized
     if pillow2op == "DROP":
@@ -324,4 +330,3 @@ while True:
             roundElapsedTime = time.time()  
 
 print("HP: ", HP)
-
