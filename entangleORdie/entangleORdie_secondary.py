@@ -91,8 +91,7 @@ def colorSetter(color):
             colorfn("BLUE")
         elif color == "OFF1":
             colorfn("OFF")
-             
-    
+                 
     elif hadamardTracker == True:
         colorfn("OFF")
 
@@ -144,7 +143,7 @@ while True:
     colorSetter(color)
 
     if dropped: 
-        whiteBlink()
+        time.sleep(0.1)
         hadamardTracker = False
         MESSAGE = "DROP"
         dropped = False
@@ -160,5 +159,3 @@ while True:
         print("comm received")
 
     print(color)
-
-
