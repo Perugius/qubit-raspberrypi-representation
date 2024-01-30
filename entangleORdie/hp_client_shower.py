@@ -1,3 +1,5 @@
+#run on computer to show hp
+
 import flet as ft
 import time
 import socket
