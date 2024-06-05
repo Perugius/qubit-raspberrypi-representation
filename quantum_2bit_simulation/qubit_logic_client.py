@@ -10,11 +10,13 @@ import socket
 import RPi.GPIO as GPIO
 import random
 import numpy as np
+import sys
+import select
 
 #------------------------------------------Initializations----------------------------------------
 
 #TCP setup
-TCP_SERVER = "192.168.168.222"
+TCP_SERVER = "192.168.178.22"
 TCP_PORT = 12345
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sock.connect((TCP_SERVER, TCP_PORT))
@@ -89,16 +91,17 @@ def colorSetter(color):
             colorfn("RED")
         elif color == "BLUE":
             colorfn("BLUE")
-    
+        elif color == "OFF1":
+            colorfn("OFF")
     elif hadamardTracker == True:
         colorfn("OFF")
 
 def whiteBlink():
     for i in range(3):
         pixels1.fill((10, 10, 10))
-        time.sleep(0.1)
+        time.sleep(0.05)
         pixels1.fill((0, 0, 0))
-        time.sleep(0.1)
+        time.sleep(0.05)
 
 def flipCheck():
     global flipCount
@@ -142,9 +145,10 @@ def fallingCheck():
     global dropCount
     global dropped
 
-    if dropCount >= 3:
+    if dropCount >= 5:
         dropped = True
-    if (-2<accelerometerXYZ[0]<2 and -2<accelerometerXYZ[1]<2 and -2<accelerometerXYZ[2]<2):
+        dropCount = 0
+    elif (-3<accelerometerXYZ[0]<3 and -3<accelerometerXYZ[1]<3 and -3<accelerometerXYZ[2]<3):
         dropCount += 1
     else:
         dropCount = 0
@@ -155,11 +159,13 @@ while True:
     flipCheck()
     squeezeCheck()
     fallingCheck()
+    if color == 'ENTG':
+       hadamardTracker = True
     colorSetter(color)
 
     if flipped:
-        whiteBlink()
         MESSAGE = "FLIP"
+        whiteBlink()
         flipped = False
     elif squeezed:
         whiteBlink()
@@ -171,15 +177,25 @@ while True:
         hadamardTracker = False
         MESSAGE = "DROP"
         dropped = False
+    elif sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+        user_input = input()
+        if user_input.strip() == "GAT1":
+            whiteBlink()
+            MESSAGE = "GAT1"
+            hadamardTracker = True
+        elif user_input.strip() == "GAT2":
+            whiteBlink()
+            MESSAGE = "GAT2"
+            hadamardTracker = True
     else:
         MESSAGE = "IDLE"
-    
+   
     try:
         #send operation done (i.e X gate , measurement etc. Receice color that should take)
         color = sock.recv(4)
         sock.send(MESSAGE.encode())
         color = color.decode()
     finally:
-        print("comm received")
-
+       # print("comm received")
+       pass
     print(color)

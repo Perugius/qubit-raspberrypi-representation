@@ -11,11 +11,13 @@ import RPi.GPIO as GPIO
 from pn532 import *
 import random
 import numpy as np
+import sys
+import select
 
 #------------------------------------------Initializations----------------------------------------
 
 #TCP setup
-TCP_SERVER = "192.168.104.106" # maybe "127.0.0.1" better?
+TCP_SERVER = "192.168.178.22" # maybe "127.0.0.1" better?
 TCP_PORT = 12345
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sock.bind((TCP_SERVER, TCP_PORT))
@@ -60,6 +62,12 @@ n1tilde = np.kron(identity, ntilde)
 n2tilde = np.kron(ntilde, identity)
 n1 = np.kron(identity, n)
 n2 = np.kron(n, identity)
+B_0 = -(xGate + zGate)/np.sqrt(2)
+B_1 = (xGate - zGate)/np.sqrt(2)
+e0, v0 = np.linalg.eigh(B_0)
+e1, v1 = np.linalg.eigh(B_1)
+gate0 = np.kron(v0, identity)
+gate1 = np.kron(v1, identity)
 #state
 pillow1State = np.array([1, 0]) #this pillow
 pillow2State = np.array([1, 0]) #other pillow
@@ -101,16 +109,16 @@ def vector2color():
     global MESSAGE
     global thisPillow
 
-    if np.allclose(combinedState, np.array([1, 0, 0, 0])):
+    if np.allclose(abs(combinedState), np.array([1, 0, 0, 0])):
         thisPillow = "RED"
         MESSAGE = "RED1"
-    elif np.allclose(combinedState, np.array([0, 1, 0, 0])):
+    elif np.allclose(abs(combinedState), np.array([0, 1, 0, 0])):
         thisPillow = "BLUE"
         MESSAGE = "RED1"
-    elif np.allclose(combinedState, np.array([0, 0, 1, 0])):
+    elif np.allclose(abs(combinedState), np.array([0, 0, 1, 0])):
         thisPillow = "RED"
         MESSAGE = "BLUE"
-    elif np.allclose(combinedState, np.array([0, 0, 0, 1])):
+    elif np.allclose(abs(combinedState), np.array([0, 0, 0, 1])):
         thisPillow = "BLUE"
         MESSAGE = "BLUE"
     elif np.allclose(abs(combinedState), np.array([0.70710678, 0, 0, 0.70710678])) or np.allclose(abs(combinedState), np.array([0, 0.70710678, 0.70710678, 0])) or np.allclose(abs(combinedState), np.array([0.5, 0.5, 0.5, 0.5])):
@@ -128,6 +136,13 @@ def vector2color():
     elif np.allclose(abs(combinedState), np.array([0.70710678, 0,  0.70710678, 0])):
         thisPillow = "RED"
         MESSAGE = "OFF1"
+    elif np.allclose(abs(combinedState), np.array([0, 0.92387953, 0, 0.38268343])) or np.allclose(abs(combinedState), np.array([0, 0.38268343, 0, 0.92387953])):
+        thisPillow = "BLUE"
+        MESSAGE = "OFF1"  
+    elif np.allclose(abs(combinedState), np.array([0.92387953, 0,  0.38268343, 0])) or np.allclose(abs(combinedState), np.array([0.38268343, 0, 0.92387953, 0])):
+        thisPillow = "RED"
+        MESSAGE = "OFF1"
+    
 
     if hadamardTracker == False:
         colorfn(thisPillow)
@@ -137,9 +152,9 @@ def vector2color():
 def whiteBlink():
     for i in range(3):
         pixels1.fill((10, 10, 10))
-        time.sleep(0.1)
+        time.sleep(0.05)
         pixels1.fill((0, 0, 0))
-        time.sleep(0.1)
+        time.sleep(0.05)
 
 def flipCheck():
     global flipCount
@@ -190,7 +205,7 @@ def fallingCheck():
     global dropCount
     global dropped
 
-    if dropCount >= 1:
+    if dropCount >= 6:
         dropped = True
         dropCount = 0
     elif (-3<accelerometerXYZ[0]<3 and -3<accelerometerXYZ[1]<3 and -3<accelerometerXYZ[2]<3):
@@ -233,6 +248,11 @@ def measurement(pillow):
 
 
 while True:
+    #TCP communication
+    c.send(MESSAGE.encode())
+    pillow2op = c.recv(4)
+    pillow2op = pillow2op.decode()
+
     accelerometerXYZ = accelerometer.acceleration
     buttonPress = GPIO.input(17)
     flipCheck()
@@ -240,10 +260,7 @@ while True:
     fallingCheck()
     vector2color()
     nfcDelay += 1
-    #TCP communication
-    c.send(MESSAGE.encode())
-    pillow2op = c.recv(4)
-    pillow2op = pillow2op.decode()
+
 
     if squeezed:
         whiteBlink()    
@@ -262,8 +279,12 @@ while True:
     if nfcDelay >= 100:
         nfcDelay = 0
         if nfc_read():
+            #check if this pillow is entangled and only send entg message if yes
+            time.sleep(1)
             whiteBlink() 
             combinedState = cnot12@combinedState
+            if np.allclose(abs(combinedState), np.array([0.70710678, 0, 0, 0.70710678])) or np.allclose(abs(combinedState), np.array([0, 0.70710678, 0.70710678, 0])) or np.allclose(abs(combinedState), np.array([0.5, 0.5, 0.5, 0.5])):
+                MESSAGE = "ENTG"
 
 
     if pillow2op == "SQUZ":
@@ -272,5 +293,10 @@ while True:
         combinedState = np.dot(x2, combinedState)
     if pillow2op == "DROP":
         measurement(2)
-    
+    if pillow2op == "GAT1":
+        print("gate2")
+        combinedState = np.dot(gate0, combinedState)
+    if pillow2op == "GAT2":
+        combinedState = np.dot(gate1, combinedState)
+
     print(combinedState)
