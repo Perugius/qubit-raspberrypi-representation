@@ -9,17 +9,30 @@ The Raspberry Pis are implemented into pillows to enable physical operations lik
 - entangleORdie : Small game containing few quantum operations
 - pn532 : NFC library
 
-<h2>Setup and quick guide</h2>
+### **Setup Instructions**
+1. **Hardware**: 
+   - 2 Raspberry Pis
+   - Accelerometer (ADXL345)
+   - LED strips
+   - Physical buttons or switches
+   - NFC reader (only needed on one Pi)
+   - All Pis need to be connected to the same local network with static IPs (set in the code).
 
-The Raspbery Pis have to be connected to an accelerometer (adxl345), LED strips, physical buttons/switched and an NFC reader (only 1 needs this), to the corresponding GPIO pins stated in the code.
-Additionally, they function via TCP/IP, so they need to be in a local network with static IP addresses also specified in the code.
+2. **Connections**:
+   - Wire up the accelerometer, LEDs, and buttons to the Raspberry Pis based on the GPIO pins defined in the code.
+   
+3. **Running the Simulation**:
+   - After cloning this repo to both Raspberry Pis, do the following:
+     1. SSH or VNC into each Pi.
+     2. On the Pi with the NFC reader, run:
+        ```bash
+        sudo python3 qubit_logic.py
+        ```
+     3. On the other Pi, run:
+        ```bash
+        sudo python3 qubit_logic_client.py
+        ```
 
-To run the quantum two qubit simulation (assuming repo has been cloned on the pis):
-
-1. cd into quantum_2bit_simulation
-2. SSH or VNC into both raspberries
-3. on raspberry with NFC run: sudo python3 qubit_logic.py
-4. on the other run: sudo python3 qubit_logic_client.py
-
-TO-DO:
-add entangleORdie guide, move pn532 path
+### **To-Do**
+- [ ] Add guide for the "entangleORdie" game.
+- [ ] Tidy up the `pn532` library path.
